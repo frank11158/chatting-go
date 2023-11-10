@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <title>Websocket with Golang</title>
+  </head>
+
+  <body>
+    <div class="center">
+      <h1>Amazing Chat Application</h1>
+      <h3 id="chat-header">Currently Chat: general</h3>
+      <h3 id="connection-header">Connected to Websocket: false</h3>
+
+      <form id="chatroom-selection">
+        <label for="chatroom">Chatroom:</label>
+        <input type="text" id="chatroom" name="chatroom" /><br /><br />
+        <input type="submit" value="Change chatroom" />
+      </form>
+
+      <br />
+
+      <div class="chatroom-area" id="chatroom-area">
+        <textarea
+          class="messagearea"
+          id="chatmessages"
+          readonly
+          name="chatmessages"
+          rows="4"
+          cols="50"
+          placeholder="Welcome to chatroom"
+        ></textarea>
+
+        <br />
+
+        <form id="chatroom-message">
+          <label for="message">Message:</label>
+          <input type="text" id="message" name="message" /><br /><br />
+          <input type="submit" value="Send Message" />
+        </form>
+      </div>
+
+      <div style="border: 3px solid balck; margin-top: 30px">
+        <button class="start-chat" id="start-chat">Start Chat</button>
+        <button class="stop-chat" id="stop-chat">Leave</button>
+      </div>
+    </div>
+  </body>
+
+  <script>
+    var selectedChatroom = 'general';
+
+    class Event {
+      constructor(type, payload) {
+        this.type = type;
+        this.payload = payload;
+      }
+    }
+
+    class SendMessageEvent {
+      constructor(message, from) {
+        this.message = message;
+        this.from = from;
+      }
+    }
+
+    class NewMessageEvent {
+      constructor(message, from, sent) {
+        this.message = message;
+        this.from = from;
+        this.sent = sent;
+      }
+    }
+
+    class ChangeChatroomEvent {
+      constructor(chatroom) {
+        this.chatroom = chatroom;
+      }
+    }
+
+    function routeEvent(event) {
+      if (event.type === undefined) {
+        alert('no type field in the event');
+      }
+
+      switch (event.type) {
+        case 'new_message':
+          const messageEvent = Object.assign(
+            new NewMessageEvent(),
+            event.payload
+          );
+          appendChatMessage(messageEvent);
+          break;
+        default:
+          alert('unsupported event type');
+          break;
+      }
+    }
+
+    function appendChatMessage(messageEvent) {
+      var date = new Date(messageEvent.sent);
+      const formattedMsg = `${date.toLocaleString()}: ${messageEvent.from}: ${
+        messageEvent.message
+      }`;
+
+      textarea = document.getElementById('chatmessages');
+      textarea.innerHTML = textarea.innerHTML + '\n' + formattedMsg;
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+
+    function changeChatroom() {
+      var newchat = document.getElementById('chatroom');
+      if (newchat != null && newchat.value != selectedChatroom) {
+        selectedChatroom = newchat.value;
+        header = document.getElementById('chat-header').innerHTML =
+          'Currently in chatroom: ' + selectedChatroom;
+
+        let changeEvent = new ChangeChatroomEvent(selectedChatroom);
+        sendEvent('change_room', changeEvent);
+
+        textarea = document.getElementById('chatmessages');
+        textarea.innerHTML = 'You changed room to ' + selectedChatroom + '\n';
+      }
+      return false;
+    }
+
+    function sendEvent(eventName, payload) {
+      const event = new Event(eventName, payload);
+
+      conn.send(JSON.stringify(event));
+    }
+
+    function sendMessage() {
+      var newMessage = document.getElementById('message');
+      if (newMessage != null) {
+        let outgoingEvent = new SendMessageEvent(newMessage.value, 'admin');
+        sendEvent('send_message', outgoingEvent);
+      }
+      return false;
+    }
+
+    function connectWebsocket() {
+      if (window['WebSocket']) {
+        console.log('support websocket');
+
+        conn = new WebSocket(
+          'ws://' + document.location.host + '/ws?group=general'
+        ); // connect to ws
+
+        conn.onopen = function (evt) {
+          document.getElementById('connection-header').innerHTML =
+            'Connected to Websocket: true';
+        };
+
+        conn.onclose = function (evt) {
+          document.getElementById('connection-header').innerHTML =
+            'Connected to Websocket: false';
+          // TODO: reconnect
+        };
+
+        conn.onmessage = function (evt) {
+          const eventData = JSON.parse(evt.data);
+
+          const event = Object.assign(new Event(), eventData);
+          routeEvent(event);
+        };
+
+        document.getElementById('chatroom-selection').style.display = 'none';
+        document.getElementById('chatroom-area').style.display = 'block';
+        document.getElementById('start-chat').style.display = 'none';
+        document.getElementById('stop-chat').style.display = 'block';
+      } else {
+        alert('Your browser does not support WebSocket.');
+      }
+    }
+
+    function leaveChat() {
+      conn.close();
+      document.getElementById('chatmessages').innerHTML = '';
+      document.getElementById('chatroom-selection').style.display = 'block';
+      document.getElementById('chatroom-area').style.display = 'none';
+      document.getElementById('start-chat').style.display = 'block';
+      document.getElementById('stop-chat').style.display = 'none';
+    }
+
+    window.onload = function () {
+      document.getElementById('chatroom-selection').onsubmit = changeChatroom;
+      document.getElementById('chatroom-message').onsubmit = sendMessage;
+      document.getElementById('start-chat').onclick = connectWebsocket;
+      document.getElementById('stop-chat').onclick = leaveChat;
+    };
+  </script>
+
+  <style type="text/css">
+    body {
+      overflow: hidden;
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #f2f2f2;
+    }
+
+    .center {
+      margin: auto;
+      width: 50%;
+      border: 3px solid #73ad21;
+      padding: 10px;
+    }
+
+    .chatroom-area {
+      display: none;
+    }
+
+    .messagearea {
+      width: 100%;
+      height: 300px;
+    }
+
+    .chatroom-area {
+      margin-top: 30px;
+    }
+
+    .chatroom-area input[type='text'] {
+      width: 100%;
+    }
+
+    .chatroom-area input[type='submit'] {
+      width: 100%;
+    }
+
+    .stop-chat {
+      display: none;
+    }
+  </style>
+</html>
